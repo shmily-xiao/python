@@ -1,0 +1,140 @@
+#coding = utf-8
+import urllib.request
+#import urllib.urlretrieve
+import re
+import socket
+
+#urlQ = "http://www.meizitu.com/a/baobei.html"
+urlQ = "http://www.meizitu.com"
+#urlQ = "http://www.lofter.com/"
+urlROOT = "meizitu.com"
+#urlROOT =""
+URLLIST=""
+timeout = 30
+def getHtml(url):
+	try:
+		page = urllib.request.urlopen(url)
+		html = page.read()
+		return html
+	except ValueError:
+		print(url+":getHtml 图像格式不正确")
+		return None
+	except UnboundLocalError:
+		print(url+": getHtml 返回数据格式有错")
+		return None
+	else:
+		print(url+":getHtml 图像格式未知错误")
+		return None
+	
+def getUrlList(html):
+	u = r"(?<=href=\").+?(?=\.html\")" 
+	#u = r"<a[^>]+href=\s*(?:(?<href>[^\"]+)\"|\"\"(?<href>[^\"\"]+)\"\"|(?<href>[^>\s]+))\s*[^>]*>"
+	urlre = re.compile(u)
+	uList = re.findall(urlre,html)
+	global URLLIST
+	URLLIST = URLLIST | set(uList)
+	try:
+		for url in uList:
+			if len(URLLIST) > 100: break
+			if urlROOT not in url:continue
+			url = url+".html"
+			#递归把需要的url找出来
+			try:
+				html = getHtml(url)
+				html = html.decode('gbk')
+				urlTemp = getUrlList(html)
+				URLLIST = (set(urlTemp) | URLLIST)
+				#状态响应的时间设置
+				socket.setdefaulttimeout(timeout)
+			except :
+				pass
+			else:
+				print("递归出错！")
+			finally:
+				pass
+	except TypeError:
+		print("getUrlList类型错误！")
+	except UnboundLocalError:
+		print("getUrlList 有参数未声明！")
+	
+	return set(URLLIST)
+
+
+def getUrl(html,urlQ):
+	global URLLIST
+	i = 0;
+	try:
+		if not len(URLLIST): return 0;
+		for urll in URLLIST:
+			#添加后缀
+			url = urll+".html"
+			print("当前连接："+url)
+			#if i==10: break;
+			i = i + 1 
+			if not url:continue
+			html = getHtml(url)
+			if not html: continue
+			try:
+				html = html.decode('GBK')
+				info = getImg(html,i)
+			except UnicodeDecodeError:
+				print("遇到GBK格式不适用！开始转码到UTF-8")
+				try:
+					html = html.decode('utf-8')
+					info = getImg(html,i)
+				except UnicodeDecodeError:
+					print("转码到UTF-8失败！")
+				else:
+					print("转码失败")
+			else:
+				print("格式无法装换！")
+			#获取最后的状态
+			print (url+":"+info)
+			#getUrl(html,urlQ)
+	
+		#return urllist
+	except UnboundLocalError:
+		print("urllist有错!")
+	else:
+		pass
+	finally:
+		pass
+
+def getImg(html,info):
+	#reg = r'src="(.+?\.jpg)" pic_ext'
+	reg = r'src="(.+?\.jpg)"'
+	imgre = re.compile(reg)
+	imglist = re.findall(imgre,html)
+	s="img"
+	x = 0
+	for imgurl in imglist:
+		if not imgurl: continue
+		print(imgurl)
+		try:
+			urllib.request.urlretrieve(imgurl,'img/%d%d%s.jpg' %(info,x*2 + info,s))
+			print(imgurl+"：成功")
+			#状态响应的时间设置
+			socket.setdefaulttimeout(timeout)
+		except ValueError:
+			print(imgurl+"：图像格式不正确")
+		except urllib.error.HTTPError:
+			print(imgurl+"：图像没有找到")
+			
+		x = x + 1
+	if (x+info) != 0:
+		return "success"
+	else:
+		return "fail"
+
+
+html = getHtml(urlQ)
+#html = html.decode('utf-8')
+#info = getImg(html,1)
+html = html.decode('gbk')
+URLLIST = set(URLLIST)
+URLLIST = getUrlList(html)
+print(URLLIST)
+getUrl(html,urlQ)
+#for url in urllist:
+	#print(url)
+		
