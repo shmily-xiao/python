@@ -1,0 +1,224 @@
+#import urllib.parse,urllib.request,http.cookiejar 
+import urllib.request,http.cookiejar 
+import re
+import  http.client
+from PIL import Image
+import os
+#imgUrl="http://t.cd917.com/Login/VerifyCodeImage?rnd=0.35113360613668154"
+NUMINDEX = 1
+posturl = 'http://t.cd917.com/login/login?urlreferrer=http://t.cd917.com/Store/BusSale'
+loginurl = 'http://t.cd917.com/Login/Login.html'
+homeurl = 'http://t.cd917.com/Store/BusSale'
+logindomain = 't.cd917.com'
+class MyCode(object):
+        #得到网页
+        def getHtml(url):
+                try:
+                        page = urllib.request.urlopen(url)
+                        html = page.read()
+                        return html
+                except ValueError:
+                        print(url+":getHtml 图像格式不正确")
+                        return None
+                except UnboundLocalError:
+                        print(url+": getHtml 返回数据格式有错")
+                        return None
+                else:
+                        print(url+":getHtml 图像格式未知错误")
+                        return None
+                        
+        #得到一定数量的图片验证码
+        @staticmethod
+        def getMyImg(imgurl):
+                for i in range(NUMINDEX):
+                        #imgUrl="http://t.cd917.com/Login/VerifyCodeImage?rnd=0.35113360613668154"
+                        header = {
+                        'Cache-Control':'private',
+                        'Content-Type':'image/Gif',
+                        'Date':'Fri, 16 Oct 2015 03:28:56 GMT',
+                        'Server':'WWW Server/1.1',
+                        'Transfer-Encoding':'chunked',
+                        'X-AspNet-Version':'4.0.30319',
+                        'X-AspNetMvc-Version':'4.0',
+                        'X-Powered-By':'ASP.NET',
+                        'X-Safe-Firewall':'zhuji.360.cn 1.0.8.2 F1W1',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/44.0.2403.157 UBrowser/5.5.5701.114 Safari/537.36',
+                        }
+                        html = MyCode.getHtml(imgUrl)
+                        #print (html)
+                        file_object = open('code/%d.jpg' %i, 'wb') 
+                        file_object.write(html)
+                        file_object.close()
+
+        #图像二值化
+        @staticmethod
+        def doubleImg(img):
+                #这里应该是一个RGB的三层图像数据，是3维的数组
+                pixdata = img.load()
+                #img.show()
+                #二值化
+                for y in range(img.size[1]):
+                    for x in range(img.size[0]):
+                        if pixdata[x, y][0] > 210:
+                                pixdata[x, y] = (0,0,0,0)
+                        else:
+                                pixdata[x, y] = (255,255,255,255)
+                #img.show()
+                for y in range(img.size[1]):
+                    for x in range(img.size[0]):
+                        if pixdata[x, y][1] > 210:
+                                pixdata[x, y] = (0, 0, 0, 0)
+                        else:
+                                pixdata[x, y] = (255, 255, 255, 255)
+                #img.show()
+                for y in range(img.size[1]):
+                    for x in range(img.size[0]):
+                            if pixdata[x, y][2] > 210:
+                                    pixdata[x, y] = (0, 0, 0, 0)
+                            else:
+                                    pixdata[x, y] = (255, 255, 255, 255)
+                #img.show()
+                return img
+        #分割图片
+        def splitImg():
+                j = 1
+                dir="newCode/"
+                for f in os.listdir(dir):
+                        if f.endswith(".gif"):
+                                img = Image.open(dir + f)
+                                img = img.convert("RGBA")
+                                for i in range(4):
+                                        if i==0 :
+                                                x = 6+i*14
+                                        if i==1:
+                                                x = 4+i*14
+                                        if i==2:
+                                                x = 2+i*14
+                                        if i==3:
+                                                x = i*14
+                                        y = 8
+                                        #存放图片
+                                        img.crop((x,y,x+11,y+17)).save("./item/%d.jpg"%j)
+                                        print ("j=%d",j)
+                                        j = j + 1
+        #分割
+        def division(img):
+            font=[]
+            for i in range(4):
+                if i==0:
+                        x = 6+i*14
+                if i==1:
+                        x = 4+i*14
+                if i==2:
+                        x = 2+i*14
+                if i==3:
+                        x = i*14
+                y = 8
+                font.append(img.crop((x,y,x+11,y+17)))
+                img.crop((x,y,x+11,y+17)).save("./item/%d.jpg" % i)
+            return font
+
+        #识别图片
+        #255,255,255 代表白色
+        @staticmethod
+        def recognize(img):
+            #颜色反转
+            MyCode.doubleImg(img)
+            #颜色反转
+            MyCode.doubleImg(img)
+            fontMods = []
+            for i in range(10):
+                img_open = Image.open("nums/%d.jpg" % i)
+                MyCode.doubleImg(img_open)
+                fontMods.append((str(i), img_open))
+            result = ""
+            font = MyCode.division(img)
+            for i in font:
+                target=i
+                points = []
+                for mod in fontMods:
+                    diffs = 0
+                    for yi in range(17):
+                        for xi in range(11):
+                            if mod[1].getpixel((xi,yi))[0] == 0 | target.getpixel((xi, yi))[0] == 0:
+                                if mod[1].getpixel((xi, yi)) != target.getpixel((xi, yi)):
+                                    diffs += 1     
+                    points.append((diffs, mod[0]))
+                points.sort()
+                result += points[0][1]
+            return result
+
+class Login(object):
+     
+    def __init__(self):
+        self.name = ''
+        self.passwprd = ''
+        self.code = ''
+
+        #设置一个cookie处理器，它负责从服务器下载cookie到本地，并且在发送请求时带上本地的cookie
+        self.cj = http.cookiejar.LWPCookieJar()            
+        self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cj)) 
+        urllib.request.install_opener(self.opener)    
+     
+    def setLoginInfo(self,username,password,code):
+        '''设置用户登录信息'''
+        self.name = username
+        self.pwd = password
+        self.code = code
+ 
+    def login(self):
+        '''登录网站'''
+        loginparams = {
+                "verifyCode":self.code,
+                "loginName1":self.name,
+                "password1":self.pwd
+                }
+        print(loginparams)
+        headers = {
+                'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Encoding':'gzip, deflate',
+                'Accept-Language':'zh-CN,zh;q=0.8',
+                'Cache-Control':'no-cache',
+                'Connection':'keep-alive',
+                'Content-Type':'application/x-www-form-urlencoded',
+                #'Cookie':'ASP.NET_SessionId=1vpemz1iyg5qlsrkf0n5bici; CNZZDATA5879876=cnzz_eid%3D1688586245-1444917151-%26ntime%3D1445326402',
+                'Host':'t.cd917.com',
+                'Origin':'http://t.cd917.com',
+                'Pragma':'no-cache',
+                'Referer':'http://t.cd917.com/Store/BusSale',
+                'Upgrade-Insecure-Requests':'1',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/44.0.2403.157 UBrowser/5.5.5701.114 Safari/537.36',
+                }
+        
+        req = urllib.request.Request(posturl, urllib.parse.urlencode(loginparams).encode('UTF-8'),headers=headers)  
+        #print(req)
+        response = urllib.request.urlopen(req)
+        self.operate = self.opener.open(req)
+        thePage = response.read()
+        print(thePage)
+        
+if __name__ == '__main__':
+        code = MyCode()
+        while True:
+            #imgUrl="http://t.cd917.com/Login/VerifyCodeImage?rnd=0.35113360613668154"
+            imgUrl='http://t.cd917.com/Login/GetVerifyCode'
+            code.getMyImg(imgUrl)
+            for i in range(NUMINDEX):
+                    img = Image.open('code/'+str(i)+'.jpg') # 读入图片
+                    img = img.convert("RGBA")
+                    code.doubleImg(img)
+                    img.save("newCode/"+str(i)+".gif", "GIF")
+                    #放大图像 方便识别
+                    im_orig = Image.open('newCode/'+str(i)+'.gif')
+                    big = im_orig.resize((2000, 1000), Image.NEAREST)
+
+            codedir="newCode/"
+            img = Image.open(codedir+str(0)+'.gif')
+            img = img.convert("RGBA")
+            result = code.recognize(img)
+            p = re.compile('1')
+            if p.search(result) == None:
+                    print (result)
+                    break
+      
+        
